@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>救急科入校前学習</title>
+    <style>
+        :root {
+            --primary: #1a237e;
+            --accent: #d32f2f;
+            --bg: #f0f2f5;
+            --card-bg: #ffffff;
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 500px; margin-bottom: 80px; }
+        header { width: 100%; text-align: center; padding: 15px 0; background: var(--primary); color: white; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h1 { margin: 0; font-size: 1.3rem; font-weight: 800; }
+
+        /* カードデザイン */
+        .quiz-card { background: var(--card-bg); border-radius: 15px; padding: 25px 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); position: relative; min-height: 280px; }
+        .menu-grid { display: grid; gap: 12px; }
+        .menu-btn { padding: 18px; font-size: 1rem; font-weight: bold; border: 2px solid var(--primary); border-radius: 12px; background: white; color: var(--primary); cursor: pointer; transition: 0.2s; }
+        .menu-btn:active { background: var(--primary); color: white; transform: scale(0.98); }
+
+        /* クイズ表示 */
+        .meta-info { font-size: 0.8rem; font-weight: bold; color: #90a4ae; margin-bottom: 15px; display: flex; justify-content: space-between; }
+        .question-text { font-size: 1.1rem; line-height: 1.6; margin-bottom: 25px; font-weight: bold; border-left: 4px solid var(--accent); padding-left: 12px; text-align: left; }
+        .options-grid { display: grid; gap: 12px; }
+        .option-btn { padding: 16px; border: 1.5px solid #cfd8dc; border-radius: 12px; background: #fff; font-size: 1rem; text-align: left; transition: 0.1s; line-height: 1.4; width: 100%; }
+        
+        /* ⭕️❌演出 */
+        #feedback-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 120px; pointer-events: none; opacity: 0; z-index: 100; transition: 0.2s; }
+        .show-feedback { opacity: 0.8 !important; transform: translate(-50%, -50%) scale(1.1) !important; }
+        .correct { background: #e8f5e9 !important; border-color: #4caf50 !important; color: #2e7d32; font-weight: bold; }
+        .incorrect { background: #ffebee !important; border-color: #ef5350 !important; color: #c62828; }
+
+        /* ナビゲーションバー */
+        .nav-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: white; padding: 12px 20px; box-shadow: 0 -3px 15px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; z-index: 1000; }
+        .btn-back { background: none; border: none; color: #546e7a; font-weight: bold; font-size: 0.9rem; padding: 10px; }
+        .btn-next { padding: 12px 30px; border: none; border-radius: 30px; background: var(--primary); color: white; font-weight: bold; font-size: 1rem; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header><h1>🚑 救急科入校前学習</h1></header>
+    
+    <div id="menu-view">
+        <div class="quiz-card">
+            <p style="text-align: center; font-weight: bold; color: #546e7a;">セクションを選択してください</p>
+            <div id="part-buttons" class="menu-grid"></div>
+        </div>
+    </div>
+
+    <div id="quiz-view" style="display:none;">
+        <div class="quiz-card">
+            <div id="feedback-overlay"></div>
+            <div class="meta-info">
+                <span id="meta-part"></span>
+                <span id="meta-count"></span>
+            </div>
+            <div id="question" class="question-text"></div>
+            <div id="options" class="options-grid"></div>
+        </div>
+    </div>
+</div>
+
+<div class="nav-bar" id="nav-bar" style="display:none;">
+    <button class="btn-back" onclick="backToMenu()">⬅ 戻る</button>
+    <button class="btn-next" onclick="nextQuestion()">次の問題 ➔</button>
+</div>
+
+<script src="data.js"></script>
+<script>
+    let activeQuizData = [];
+    let currentIdx = 0;
+
+    window.onload = () => {
+        // data.jsから読み込まれたquizDataの存在確認
+        if (typeof quizData !== 'undefined' && quizData.length > 0) {
+            createMenu();
+        } else {
+            document.getElementById('part-buttons').innerHTML = "<p style='color:red;'>data.js の読み込みに失敗しました。<br>ファイル名と変数名を確認してください。</p>";
+        }
+    };
+
+    function createMenu() {
+        const menuArea = document.getElementById('part-buttons');
+        // JSONのキー "part" を確実に取得
+        const parts = [...new Set(quizData.map(d => d.part || d["part"]))];
+        menuArea.innerHTML = '';
+        
+        const allBtn = document.createElement('button');
+        allBtn.className = 'menu-btn';
+        allBtn.style.borderColor = 'var(--accent)';
+        allBtn.style.color = 'var(--accent)';
+        allBtn.innerText = "すべての範囲からランダム";
+        allBtn.onclick = () => startQuiz("すべて");
+        menuArea.appendChild(allBtn);
+
+        parts.forEach(p => {
+            const btn = document.createElement('button');
+            btn.className = 'menu-btn';
+            btn.innerText = p;
+            btn.onclick = () => startQuiz(p);
+            menuArea.appendChild(btn);
+        });
+    }
+
+    function startQuiz(partName) {
+        activeQuizData = (partName === "すべて") 
+            ? [...quizData] 
+            : quizData.filter(d => (d.part || d["part"]) === partName);
+        activeQuizData.sort(() => 0.5 - Math.random());
+        currentIdx = 0;
+        document.getElementById('menu-view').style.display = 'none';
+        document.getElementById('quiz-view').style.display = 'block';
+        document.getElementById('nav-bar').style.display = 'flex';
+        showQuestion();
+    }
+
+    function backToMenu() {
+        document.getElementById('menu-view').style.display = 'block';
+        document.getElementById('quiz-view').style.display = 'none';
+        document.getElementById('nav-bar').style.display = 'none';
+    }
+
+    function showQuestion() {
+        const item = activeQuizData[currentIdx];
+        const area = document.getElementById('options');
+        const overlay = document.getElementById('feedback-overlay');
+        area.innerHTML = '';
+        overlay.className = '';
+        overlay.innerText = '';
+        
+        const contentStr = item.content || item["content"];
+        const partStr = item.part || item["part"];
+
+        document.getElementById('meta-part').innerText = partStr;
+        document.getElementById('meta-count').innerText = `${currentIdx + 1}/${activeQuizData.length}`;
+
+        const match = contentStr.match(/\[\[(.*?)\]\]/);
+        if (!match) return;
+        const correctAns = match[1];
+
+        // 最初の [[ ]] を穴埋め、その他はカッコ除去
+        let displayContent = contentStr.replace(/\[\[.*?\]\]/, "（　？　）").replace(/\[\[(.*?)\]\]/g, "$1");
+        document.getElementById('question').innerText = displayContent;
+
+        let options = generateSmartOptions(correctAns, partStr);
+        options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.innerText = opt;
+            btn.onclick = () => checkAnswer(btn, opt, correctAns);
+            area.appendChild(btn);
+        });
+        window.scrollTo(0, 0);
+    }
+
+    function generateSmartOptions(correct, part) {
+        // すべての空欄候補を抽出
+        let allBlanks = [...new Set(quizData.flatMap(d => {
+            const c = d.content || d["content"];
+            return (c.match(/\[\[(.*?)\]\]/g) || []).map(m => m.replace(/\[\[|\]\]/g, ''));
+        }))].filter(b => b !== correct);
+
+        let scoredDummies = allBlanks.map(blank => {
+            let score = 0;
+            if (quizData.some(d => (d.part || d["part"]) === part && (d.content || d["content"]).includes(`[[${blank}]]`))) score += 10;
+            if (Math.abs(blank.length - correct.length) <= 2) score += 5;
+            if (/\d/.test(blank) === /\d/.test(correct)) score += 8;
+            const units = ["cm", "kg", "回", "分", "m", "点", "時間", "JCS", "GCS"];
+            units.forEach(u => { if (blank.includes(u) && correct.includes(u)) score += 15; });
+            return { text: blank, score: score };
+        });
+
+        scoredDummies.sort((a, b) => b.score - a.score + (Math.random() * 4 - 2));
+        return [correct, ...scoredDummies.slice(0, 3).map(d => d.text)].sort(() => 0.5 - Math.random());
+    }
+
+    function checkAnswer(btn, selected, correct) {
+        if (btn.disabled) return;
+        const btns = document.querySelectorAll('.option-btn');
+        const overlay = document.getElementById('feedback-overlay');
+        btns.forEach(b => b.disabled = true);
+
+        if (selected === correct) {
+            btn.classList.add('correct');
+            overlay.innerText = '⭕';
+            overlay.style.color = 'rgba(76, 175, 80, 0.8)';
+            overlay.className = 'show-feedback';
+        } else {
+            btn.classList.add('incorrect');
+            overlay.innerText = '❌';
+            overlay.style.color = 'rgba(244, 67, 54, 0.8)';
+            overlay.className = 'show-feedback';
+            btns.forEach(b => { if (b.innerText === correct) b.classList.add('correct'); });
+        }
+        setTimeout(() => { overlay.classList.remove('show-feedback'); }, 1000);
+    }
+
+    function nextQuestion() {
+        currentIdx = (currentIdx + 1) % activeQuizData.length;
+        showQuestion();
+    }
+</script>
+</body>
+</html>
